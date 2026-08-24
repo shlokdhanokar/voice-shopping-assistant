@@ -4,8 +4,8 @@ A voice-controlled shopping list with natural-language understanding, smart
 suggestions and voice-activated search. **Zero dependencies, zero build step,
 zero API keys** — it is plain ES modules, served as static files.
 
-> **Live demo:** _add your deployment URL here_
-> **Repository:** _add your repository URL here_
+> **Live demo:** <https://shlokdhanokar.github.io/voice-shopping-assistant/>
+> **Repository:** <https://github.com/shlokdhanokar/voice-shopping-assistant>
 
 ---
 
@@ -48,7 +48,7 @@ The app is static, but ES modules need a real HTTP origin — opening
 `index.html` from the filesystem will not work.
 
 ```bash
-git clone <your-repo-url>
+git clone https://github.com/shlokdhanokar/voice-shopping-assistant.git
 cd voice-shopping-assistant
 
 python -m http.server 8000     # or: npx serve .
