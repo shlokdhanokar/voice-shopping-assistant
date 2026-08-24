@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="description" content="VoiceCart — a voice-controlled shopping list with smart suggestions, multilingual commands and voice search." />
+  <meta name="theme-color" content="#0f766e" />
+  <title>VoiceCart — Voice Shopping Assistant</title>
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🛒</text></svg>" />
+  <link rel="stylesheet" href="css/styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#list-section">Skip to shopping list</a>
+
+  <header class="app-header">
+    <div class="brand">
+      <span class="brand-mark" aria-hidden="true">🛒</span>
+      <div>
+        <h1>VoiceCart</h1>
+        <p class="tagline" id="tagline">Say what you need — I will sort it out.</p>
+      </div>
+    </div>
+
+    <div class="header-controls">
+      <label class="sr-only" for="lang-select">Command language</label>
+      <select id="lang-select" class="lang-select" title="Command language"></select>
+      <button id="mute-btn" class="icon-btn" type="button" aria-pressed="false"
+              title="Mute spoken replies" aria-label="Mute spoken replies">🔊</button>
+    </div>
+  </header>
+
+  <main>
+    <!-- ------------------------------------------------ voice control ---- -->
+    <section class="voice-panel" aria-labelledby="voice-heading">
+      <h2 id="voice-heading" class="sr-only">Voice command</h2>
+
+      <button id="mic-btn" class="mic-btn" type="button" aria-label="Start listening">
+        <span class="mic-ring" aria-hidden="true"></span>
+        <span class="mic-glyph" aria-hidden="true">
+          <svg viewBox="0 0 24 24" width="34" height="34" fill="currentColor" focusable="false">
+            <path d="M12 15a3 3 0 0 0 3-3V6a3 3 0 1 0-6 0v6a3 3 0 0 0 3 3z"/>
+            <path d="M19 12a1 1 0 1 0-2 0 5 5 0 0 1-10 0 1 1 0 1 0-2 0 7 7 0 0 0 6 6.92V21H9a1 1 0 1 0 0 2h6a1 1 0 1 0 0-2h-2v-2.08A7 7 0 0 0 19 12z"/>
+          </svg>
+        </span>
+      </button>
+
+      <p class="mic-status" id="mic-status">Tap the mic and speak</p>
+
+      <!-- Live transcript: assertive so screen readers announce what was heard -->
+      <p class="transcript" id="transcript" aria-live="polite" data-empty="true"></p>
+
+      <form id="text-form" class="text-fallback" autocomplete="off">
+        <label class="sr-only" for="text-input">Type a command instead</label>
+        <input id="text-input" class="text-input" type="text"
+               placeholder="…or type: add 2 bottles of water" />
+        <button class="send-btn" type="submit" aria-label="Run command">➤</button>
+      </form>
+
+      <p class="feedback" id="feedback" role="status" aria-live="polite"></p>
+
+      <details class="examples">
+        <summary>What can I say?</summary>
+        <ul id="examples-list"></ul>
+      </details>
+    </section>
+
+    <!-- ------------------------------------------------ search results --- -->
+    <section class="panel search-panel" id="search-panel" hidden aria-labelledby="search-heading">
+      <div class="panel-head">
+        <h2 id="search-heading">Search results</h2>
+        <button id="close-search" class="text-btn" type="button">Close</button>
+      </div>
+      <p class="panel-sub" id="search-summary"></p>
+      <div class="results" id="search-results"></div>
+    </section>
+
+    <!-- -------------------------------------------------- suggestions ---- -->
+    <section class="panel" id="suggestions-panel" aria-labelledby="suggestions-heading">
+      <div class="panel-head">
+        <h2 id="suggestions-heading">Suggestions for you</h2>
+        <span class="hint">tap to add</span>
+      </div>
+      <div class="suggestions" id="suggestions" aria-live="polite"></div>
+    </section>
+
+    <!-- ------------------------------------------------ shopping list ---- -->
+    <section class="panel" id="list-section" aria-labelledby="list-heading">
+      <div class="panel-head">
+        <h2 id="list-heading">Shopping list</h2>
+        <span class="count-badge" id="count-badge">0 items</span>
+      </div>
+      <div id="list" class="list" aria-live="polite"></div>
+    </section>
+  </main>
+
+  <footer class="app-footer">
+    <div class="totals">
+      <span class="total-label">Estimated total</span>
+      <strong class="total-value" id="total-value">$0.00</strong>
+    </div>
+    <div class="footer-actions">
+      <button id="undo-btn" class="text-btn" type="button" disabled>↺ Undo</button>
+      <button id="clear-done-btn" class="text-btn" type="button">Clear bought</button>
+      <button id="reset-btn" class="text-btn danger" type="button">Reset</button>
+    </div>
+  </footer>
+
+  <!-- Global error banner for unrecoverable problems (no mic, bad storage) -->
+  <div class="error-banner" id="error-banner" role="alert" hidden>
+    <span id="error-text"></span>
+    <button class="icon-btn" id="error-dismiss" type="button" aria-label="Dismiss">✕</button>
+  </div>
+
+  <script type="module" src="js/app.js"></script>
+</body>
+</html>

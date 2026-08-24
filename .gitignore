@@ -1,0 +1,23 @@
+# Dependencies (this project has none — kept as a guard)
+node_modules/
+
+# Environment / secrets
+.env
+.env.*
+
+# Build artefacts
+dist/
+build/
+out/
+.next/
+
+# Editor / OS
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+npm-debug.log*

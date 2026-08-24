@@ -1,0 +1,163 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>VoiceCart — browser tests</title></head>
+<body>
+<pre id="out">running…</pre>
+<script type="module">
+const out = [];
+let failures = 0;
+function check(name, cond, detail = '') {
+  if (!cond) failures++;
+  out.push(`${cond ? 'PASS' : 'FAIL'}  ${name}${detail ? ' :: ' + detail : ''}`);
+  document.getElementById('out').textContent = out.join('\n');
+}
+
+localStorage.clear();
+
+const frame = document.createElement('iframe');
+frame.src = '../index.html';
+frame.width = 420; frame.height = 800;
+document.body.appendChild(frame);
+
+const wait = (ms) => new Promise(r => setTimeout(r, ms));
+
+frame.onload = async () => {
+  const win = frame.contentWindow;
+  const doc = frame.contentDocument;
+
+  // Wait for the app instance to be exposed.
+  for (let i = 0; i < 60 && !win.__voiceCart; i++) await wait(50);
+  check('app boots and exposes controller', !!win.__voiceCart);
+  if (!win.__voiceCart) { finish(); return; }
+
+  const app = win.__voiceCart;
+  app.voice.setMuted(true);              // no speech synthesis in headless
+  const run = async (cmd) => { await app.handleCommand(cmd, 'text'); await wait(30); };
+
+  const names = () => [...doc.querySelectorAll('.item-name')].map(n => n.textContent);
+  const qtyOf = (name) => {
+    const row = [...doc.querySelectorAll('.item')].find(r => r.querySelector('.item-name').textContent === name);
+    return row ? row.querySelector('.qty-value').textContent.trim() : null;
+  };
+  const feedback = () => doc.getElementById('feedback').textContent;
+
+  check('starts with an empty list', doc.querySelector('.empty-state') !== null);
+  check('seeded suggestions are shown', doc.querySelectorAll('.chip:not(.skeleton)').length > 0,
+        doc.querySelectorAll('.chip').length + ' chips');
+
+  // --- add -----------------------------------------------------------------
+  await run('add milk');
+  check('"add milk" adds Milk', names().includes('Milk'), names().join(','));
+  check('feedback confirms the add', /Added/i.test(feedback()), feedback());
+
+  await run('I need apples and bread');
+  check('multi-item add works', names().includes('Apples') && names().includes('Bread'), names().join(','));
+
+  await run('add 2 bottles of water and 5 oranges');
+  check('quantity + unit parsed', qtyOf('Bottled Water') === '2 bottles', qtyOf('Bottled Water'));
+  check('bare quantity parsed', qtyOf('Oranges') === '5', qtyOf('Oranges'));
+
+  await run('add milk');
+  check('re-adding merges instead of duplicating',
+        names().filter(n => n === 'Milk').length === 1 && qtyOf('Milk') === '2', qtyOf('Milk'));
+
+  // --- categories ----------------------------------------------------------
+  const cats = [...doc.querySelectorAll('.category-head')].map(n => n.textContent);
+  check('items are grouped into categories', cats.length >= 3, cats.join(' | '));
+  check('produce sorts before dairy', cats.indexOf('🥬Produce') < cats.indexOf('🥛Dairy & Eggs'), cats.join(' | '));
+
+  // --- totals --------------------------------------------------------------
+  const total = doc.getElementById('total-value').textContent;
+  check('running total is calculated', /^\$\d+\.\d\d$/.test(total) && parseFloat(total.slice(1)) > 0, total);
+
+  // --- update / remove / complete ------------------------------------------
+  await run('change bread to 3');
+  check('"change bread to 3" updates quantity', qtyOf('Bread') === '3', qtyOf('Bread'));
+
+  await run('remove milk from my list');
+  check('"remove milk" removes it', !names().includes('Milk'), names().join(','));
+
+  await run('remove caviar');
+  check('removing something absent warns instead of failing',
+        /not|could not|find/i.test(feedback()), feedback());
+
+  await run('I already bought bread');
+  const breadRow = [...doc.querySelectorAll('.item')].find(r => r.querySelector('.item-name').textContent === 'Bread');
+  check('"already bought" ticks the item off', breadRow?.dataset.done === 'true', breadRow?.dataset.done);
+
+  // --- search --------------------------------------------------------------
+  await run('Find toothpaste under $5');
+  const panel = doc.getElementById('search-panel');
+  const results = [...doc.querySelectorAll('.result')];
+  check('search panel opens', !panel.hidden);
+  check('search returns results', results.length > 0, results.length + ' results');
+  const prices = results.map(r => parseFloat(r.querySelector('.result-price').textContent.match(/\$([\d.]+)/)[1]));
+  check('every result respects the price ceiling', prices.every(p => p <= 5), prices.join(','));
+
+  await run('Find me organic apples');
+  const organic = [...doc.querySelectorAll('.result-meta')].map(n => n.textContent);
+  check('organic filter applied', organic.length > 0 && organic.every(t => /organic/.test(t)), organic.join(' | '));
+
+  // Clicking a result adds it to the list.
+  doc.querySelector('.result').click();
+  await wait(60);
+  check('clicking a search result adds it', names().includes('Apples'), names().join(','));
+
+  // --- suggestions ---------------------------------------------------------
+  const before = names().length;
+  const chip = doc.querySelector('.chip:not(.skeleton)');
+  const chipName = chip.querySelector('strong').textContent;
+  chip.click();
+  await wait(60);
+  check('clicking a suggestion adds it', names().includes(chipName), chipName);
+  check('list grew by one', names().length === before + 1);
+
+  // --- substitutes ---------------------------------------------------------
+  await run('add milk');
+  const swapBtn = [...doc.querySelectorAll('.item')]
+    .find(r => r.querySelector('.item-name').textContent === 'Milk')?.querySelector('.mini-btn');
+  swapBtn?.click();
+  await wait(60);
+  const subs = [...doc.querySelectorAll('.sub-chip')].map(n => n.textContent);
+  check('substitutes are offered for milk', subs.length > 0, subs.join(' | '));
+
+  // --- multilingual --------------------------------------------------------
+  app.setLanguage('hi');
+  await wait(30);
+  await run('दूध हटाओ');
+  check('Hindi remove works', !names().includes('Milk'), names().join(','));
+  await run('2 लीटर दूध चाहिए');
+  check('Hindi add with quantity works', qtyOf('Milk') === '2 litre', qtyOf('Milk'));
+  check('UI chrome switches language', doc.getElementById('tagline').textContent.includes('बोलिए'),
+        doc.getElementById('tagline').textContent);
+  app.setLanguage('en');
+  await wait(30);
+
+  // --- clear + undo --------------------------------------------------------
+  const beforeClear = names().length;
+  await run('clear my list');
+  check('"clear my list" empties the list', doc.querySelector('.empty-state') !== null);
+  await run('undo');
+  check('undo restores the cleared list', names().length === beforeClear, `${names().length} vs ${beforeClear}`);
+
+  // --- unrecognised --------------------------------------------------------
+  await run('flibbertigibbet the wombat');
+  check('gibberish is captured as a custom item rather than crashing',
+        names().some(n => /Flibbertigibbet/i.test(n)) || /did not catch/i.test(feedback()),
+        feedback());
+
+  // --- persistence ---------------------------------------------------------
+  check('state is persisted to localStorage', !!localStorage.getItem('vsa.state.v2'));
+
+  finish();
+};
+
+function finish() {
+  out.push('');
+  out.push(failures === 0 ? `ALL PASSED (${out.length - 1} checks)` : `${failures} FAILURE(S)`);
+  document.getElementById('out').textContent = out.join('\n');
+  document.title = failures === 0 ? 'E2E-OK' : 'E2E-FAIL';
+}
+</script>
+</body>
+</html>
