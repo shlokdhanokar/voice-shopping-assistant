@@ -203,25 +203,40 @@ what makes automated browser testing of the whole pipeline possible.
 | Edge | ✅ | ✅ |
 | Safari (macOS + iOS) | ✅ | ✅ |
 | Firefox | ❌ no `SpeechRecognition` | ✅ via typed commands |
+| Brave | ❌ blocked both online and on-device | ✅ via typed commands |
 
 When speech recognition is unavailable the app says so, disables the mic and
 directs the user to the text input rather than failing silently.
 
-### "Speech recognition needs a network connection" / mic not working
+### The mic says the speech service is unreachable
 
-By default Chrome streams microphone audio to **its own speech servers** — so
-this error is about the browser reaching *Google's speech service*, not about
-your Wi-Fi. Restrictive ISPs, corporate firewalls and some VPNs block it.
+By default Chromium streams microphone audio to **Google's speech servers**, so
+this error is about reaching *that service* — not about your Wi-Fi. Restrictive
+ISPs, corporate firewalls and some VPNs block it.
 
-The app handles this: when that error fires it offers an **"Enable offline
-voice"** button, which downloads Chrome's on-device speech model
-(`SpeechRecognition.install({ processLocally: true })`) and switches recognition
-to run locally. After that, recognition needs no speech server at all, works
-offline, and the audio never leaves the machine. If the model is already
-installed the app selects it automatically at startup.
+When it happens, the app offers an **"Enable offline voice"** button that
+downloads the on-device speech model via
+`SpeechRecognition.install({ processLocally: true })` and switches recognition
+to run locally — no speech server, works offline, and audio never leaves the
+machine. If the model is already installed it is selected automatically at
+startup. Measured on Chrome 151: the download takes about 150 seconds, once.
 
-Requires Chrome 138+ / Edge equivalent. Where on-device is unavailable, the
-typed command box remains fully functional.
+### Brave does not support voice input
+
+**Brave cannot do voice recognition at all**, and the app says so explicitly
+rather than offering a fix that cannot work. Measured on Brave 151:
+
+| Path | Brave | Chrome |
+|---|---|---|
+| Online speech service | ❌ ships without Google's API key → `network` error | ✅ |
+| On-device model (`install()`) | ❌ hangs indefinitely, never resolves | ✅ resolves in ~150 s |
+
+Brave is detected via `navigator.brave.isBrave()`. The install promise is also
+raced against a timeout, because a blocked download never rejects — it simply
+never settles, which would otherwise leave the button spinning forever.
+
+In Brave, use the typed command box: it drives the exact same NLP pipeline and
+supports every command. For voice, use Chrome or Edge.
 
 ### Known limitations
 

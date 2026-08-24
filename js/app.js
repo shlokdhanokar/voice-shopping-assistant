@@ -8,7 +8,7 @@
  */
 
 import { Store } from './store.js';
-import { VoiceEngine, isSpeechSupported, supportsOnDevice } from './speech.js';
+import { VoiceEngine, isSpeechSupported, supportsOnDevice, isBraveBrowser } from './speech.js';
 import { parse } from './nlp.js';
 import { UI, formatQuantity } from './ui.js';
 import { buildSuggestions, substitutesFor } from './suggestions.js';
@@ -110,9 +110,31 @@ class App {
     }
 
     // A `network` error means the browser's own speech service is unreachable
-    // — a firewall, VPN or restrictive ISP, not the user's Wi-Fi. If this
-    // browser can recognise speech locally, offer that as the way out.
-    if (code === 'network' && supportsOnDevice() && !this.voice.localMode) {
+    // — a firewall, VPN or restrictive ISP, not the user's Wi-Fi.
+    if (code === 'network' && !this.voice.localMode) {
+      this.explainVoiceUnavailable(message);
+      return;
+    }
+
+    this.ui.showError(message);
+  }
+
+  /**
+   * Chooses the right advice for a browser that cannot reach its speech
+   * service. Brave is called out explicitly: it ships without Google's speech
+   * API key *and* blocks the on-device model download, so offering the install
+   * button there would spin forever with no possible success.
+   */
+  async explainVoiceUnavailable(message) {
+    if (await isBraveBrowser()) {
+      this.ui.showError(
+        'Brave blocks voice recognition: it ships without the online speech service, and also blocks the offline voice model. Use Chrome or Edge for voice input — or just type your command below, which supports every command.'
+      );
+      this.ui.focusTextInput();
+      return;
+    }
+
+    if (supportsOnDevice()) {
       this.ui.showError(message, {
         label: 'Enable offline voice',
         onClick: () => this.enableOfflineVoice()
@@ -120,7 +142,8 @@ class App {
       return;
     }
 
-    this.ui.showError(message);
+    this.ui.showError(`${message} You can type your command below instead.`);
+    this.ui.focusTextInput();
   }
 
   /**
@@ -131,21 +154,29 @@ class App {
    */
   async enableOfflineVoice() {
     this.ui.setErrorActionBusy('Downloading…');
-    this.ui.setFeedback('Downloading the offline voice model (one time)…', 'warn');
+    this.ui.setFeedback('Downloading the offline voice model — this takes a couple of minutes, one time only.', 'warn');
     try {
-      const ok = await this.voice.enableOnDevice();
-      if (ok) {
+      const outcome = await this.voice.enableOnDevice();
+      if (outcome === 'installed') {
         this.ui.hideError();
         this.ui.setFeedback('Offline voice ready — tap the mic and speak.', 'ok');
         this.say('Offline voice is ready.');
+        return;
+      }
+      if (outcome === 'timeout') {
+        this.ui.showError(
+          'The offline voice model did not finish downloading — your network or browser is blocking it. Type your command below instead, or try Chrome.'
+        );
       } else {
         this.ui.showError(
           'Offline voice could not be installed for this language. You can still type commands below.'
         );
       }
+      this.ui.focusTextInput();
     } catch (err) {
       console.error('Offline voice setup failed', err);
       this.ui.showError('Offline voice setup failed. You can still type commands below.');
+      this.ui.focusTextInput();
     }
   }
 

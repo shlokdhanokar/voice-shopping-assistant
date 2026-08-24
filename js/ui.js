@@ -206,6 +206,11 @@ export class UI {
     this.dom.errorBanner.hidden = true;
   }
 
+  /** Sends the user straight to the fallback when voice is unavailable. */
+  focusTextInput() {
+    this.dom.textInput.focus({ preventScroll: true });
+  }
+
   setMuted(muted) {
     this.dom.muteBtn.textContent = muted ? '🔇' : '🔊';
     this.dom.muteBtn.setAttribute('aria-pressed', String(muted));

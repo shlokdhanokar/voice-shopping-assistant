@@ -51,19 +51,50 @@ export async function onDeviceStatus(lang) {
 }
 
 /**
+ * Brave ships without Google's speech API key *and* blocks the on-device model
+ * download, so neither recognition path can work there. Detecting it lets us
+ * give honest advice instead of offering a button that would hang.
+ */
+let braveCache = null;
+export async function isBraveBrowser() {
+  if (braveCache !== null) return braveCache;
+  try {
+    braveCache = Boolean(navigator.brave && (await navigator.brave.isBrave()));
+  } catch {
+    braveCache = false;
+  }
+  return braveCache;
+}
+
+/** How long to wait for the model download before giving up. */
+const INSTALL_TIMEOUT_MS = 240000; // measured: ~150s on Chrome over a decent link
+
+/**
  * Downloads the on-device language pack. This is a one-time download of a
- * sizeable model, so it must be triggered by a user gesture rather than run
- * automatically on page load.
- * @returns {Promise<boolean>} whether the model is now installed
+ * sizeable model, so it must be triggered by a user gesture — the API throws
+ * NotAllowedError otherwise.
+ *
+ * The promise is raced against a timeout because some Chromium builds (Brave
+ * in particular) never settle it: the download endpoint is blocked, so the
+ * call hangs indefinitely rather than rejecting.
+ *
+ * @returns {Promise<'installed'|'timeout'|'failed'|'unsupported'>}
  */
 export async function installOnDevice(lang) {
-  if (!supportsOnDevice()) return false;
+  if (!supportsOnDevice()) return 'unsupported';
+  let timer;
   try {
-    await SpeechRecognitionAPI.install({ langs: [lang], processLocally: true });
-    return (await onDeviceStatus(lang)) === 'available';
+    const outcome = await Promise.race([
+      SpeechRecognitionAPI.install({ langs: [lang], processLocally: true }).then(() => 'done'),
+      new Promise((resolve) => { timer = setTimeout(() => resolve('timeout'), INSTALL_TIMEOUT_MS); })
+    ]);
+    if (outcome === 'timeout') return 'timeout';
+    return (await onDeviceStatus(lang)) === 'available' ? 'installed' : 'failed';
   } catch (err) {
     console.warn('On-device speech install failed', err);
-    return false;
+    return 'failed';
+  } finally {
+    clearTimeout(timer);
   }
 }
 
@@ -101,15 +132,15 @@ export class VoiceEngine {
   /**
    * Downloads the on-device model and switches to it. Call from a click
    * handler so the browser sees a user gesture.
-   * @returns {Promise<boolean>}
+   * @returns {Promise<'installed'|'timeout'|'failed'|'unsupported'>}
    */
   async enableOnDevice() {
-    const ok = await installOnDevice(this.lang);
-    if (ok) {
+    const outcome = await installOnDevice(this.lang);
+    if (outcome === 'installed') {
       this.localMode = true;
       if (this.recognition) this.recognition.processLocally = true;
     }
-    return ok;
+    return outcome;
   }
 
   #build() {
