@@ -20,13 +20,52 @@ const ERROR_MESSAGES = {
   'service-not-allowed': 'Speech service unavailable. Try Chrome or Edge, or type your command.',
   'audio-capture': 'No microphone found. Plug one in, or type your command.',
   'no-speech': 'I did not hear anything — tap the mic and try again.',
-  network: 'Speech recognition needs a network connection right now.',
+  // Not the user's Wi-Fi: by default the browser streams audio to its own
+  // speech servers, and this fires when *those* cannot be reached — which is
+  // common behind restrictive ISPs, firewalls and VPNs. On-device recognition
+  // removes the dependency entirely, so we offer that instead of blaming the
+  // user's connection.
+  network: 'Your browser could not reach its online speech service. This is not your Wi-Fi — switching to offline recognition fixes it.',
   aborted: null // user-initiated stop; not worth surfacing
 };
 
 export const isSpeechSupported = () => Boolean(SpeechRecognitionAPI);
 export const isSynthesisSupported = () =>
   typeof window !== 'undefined' && 'speechSynthesis' in window;
+
+/** True when this browser can run recognition without a speech server. */
+export const supportsOnDevice = () =>
+  Boolean(SpeechRecognitionAPI && SpeechRecognitionAPI.available && SpeechRecognitionAPI.install);
+
+/**
+ * Availability of the on-device model for a language.
+ * @returns {Promise<'available'|'downloadable'|'downloading'|'unavailable'|'unsupported'>}
+ */
+export async function onDeviceStatus(lang) {
+  if (!supportsOnDevice()) return 'unsupported';
+  try {
+    return await SpeechRecognitionAPI.available({ langs: [lang], processLocally: true });
+  } catch {
+    return 'unsupported';
+  }
+}
+
+/**
+ * Downloads the on-device language pack. This is a one-time download of a
+ * sizeable model, so it must be triggered by a user gesture rather than run
+ * automatically on page load.
+ * @returns {Promise<boolean>} whether the model is now installed
+ */
+export async function installOnDevice(lang) {
+  if (!supportsOnDevice()) return false;
+  try {
+    await SpeechRecognitionAPI.install({ langs: [lang], processLocally: true });
+    return (await onDeviceStatus(lang)) === 'available';
+  } catch (err) {
+    console.warn('On-device speech install failed', err);
+    return false;
+  }
+}
 
 export class VoiceEngine {
   /**
@@ -42,7 +81,35 @@ export class VoiceEngine {
     this.listening = false;
     this.muted = false;
     this.recognition = null;
+    /** When true, recognition runs locally and needs no speech server. */
+    this.localMode = false;
     if (SpeechRecognitionAPI) this.#build();
+  }
+
+  /**
+   * Switches to on-device recognition if the model is already installed.
+   * Cheap and silent — safe to call on startup and on every language change.
+   * @returns {Promise<boolean>} whether local mode is now active
+   */
+  async useOnDeviceIfReady() {
+    if ((await onDeviceStatus(this.lang)) !== 'available') return this.localMode;
+    this.localMode = true;
+    if (this.recognition) this.recognition.processLocally = true;
+    return true;
+  }
+
+  /**
+   * Downloads the on-device model and switches to it. Call from a click
+   * handler so the browser sees a user gesture.
+   * @returns {Promise<boolean>}
+   */
+  async enableOnDevice() {
+    const ok = await installOnDevice(this.lang);
+    if (ok) {
+      this.localMode = true;
+      if (this.recognition) this.recognition.processLocally = true;
+    }
+    return ok;
   }
 
   #build() {
@@ -51,6 +118,7 @@ export class VoiceEngine {
     recognition.interimResults = true;
     recognition.maxAlternatives = 1;
     recognition.lang = this.lang;
+    if ('processLocally' in recognition) recognition.processLocally = this.localMode;
 
     recognition.onstart = () => {
       this.listening = true;
@@ -86,9 +154,18 @@ export class VoiceEngine {
     this.recognition = recognition;
   }
 
+  /**
+   * Switching language may move us between a downloaded model and one that is
+   * not installed, so local mode is re-evaluated for the new language.
+   */
   setLanguage(bcp47) {
     this.lang = bcp47;
     if (this.recognition) this.recognition.lang = bcp47;
+    this.localMode = false;
+    if (this.recognition && 'processLocally' in this.recognition) {
+      this.recognition.processLocally = false;
+    }
+    return this.useOnDeviceIfReady();
   }
 
   start() {

@@ -199,13 +199,29 @@ what makes automated browser testing of the whole pipeline possible.
 
 | Browser | Voice input | List, search, suggestions |
 |---|---|---|
-| Chrome (desktop + Android) | ✅ | ✅ |
+| Chrome (desktop + Android) | ✅ cloud + on-device | ✅ |
 | Edge | ✅ | ✅ |
 | Safari (macOS + iOS) | ✅ | ✅ |
 | Firefox | ❌ no `SpeechRecognition` | ✅ via typed commands |
 
 When speech recognition is unavailable the app says so, disables the mic and
 directs the user to the text input rather than failing silently.
+
+### "Speech recognition needs a network connection" / mic not working
+
+By default Chrome streams microphone audio to **its own speech servers** — so
+this error is about the browser reaching *Google's speech service*, not about
+your Wi-Fi. Restrictive ISPs, corporate firewalls and some VPNs block it.
+
+The app handles this: when that error fires it offers an **"Enable offline
+voice"** button, which downloads Chrome's on-device speech model
+(`SpeechRecognition.install({ processLocally: true })`) and switches recognition
+to run locally. After that, recognition needs no speech server at all, works
+offline, and the audio never leaves the machine. If the model is already
+installed the app selects it automatically at startup.
+
+Requires Chrome 138+ / Edge equivalent. Where on-device is unavailable, the
+typed command box remains fully functional.
 
 ### Known limitations
 

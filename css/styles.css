@@ -370,3 +370,12 @@ main {
   font-size: .85rem; z-index: 30;
 }
 .error-banner .icon-btn { background: rgba(255, 255, 255, .18); border-color: transparent; color: #fff; }
+
+/* Call-to-action inside the banner (e.g. "Enable offline voice"). */
+.banner-action {
+  flex-shrink: 0; background: #fff; color: var(--danger);
+  border: none; border-radius: var(--radius-sm);
+  padding: .35rem .7rem; font-size: .8rem; font-weight: 700; white-space: nowrap;
+}
+.banner-action:hover { background: rgba(255, 255, 255, .88); }
+.banner-action[disabled] { opacity: .7; cursor: progress; }

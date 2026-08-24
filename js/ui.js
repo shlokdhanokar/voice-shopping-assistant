@@ -83,6 +83,7 @@ export class UI {
       resetBtn: document.getElementById('reset-btn'),
       errorBanner: document.getElementById('error-banner'),
       errorText: document.getElementById('error-text'),
+      errorAction: document.getElementById('error-action'),
       errorDismiss: document.getElementById('error-dismiss'),
       examplesList: document.getElementById('examples-list'),
       tagline: document.getElementById('tagline')
@@ -175,9 +176,30 @@ export class UI {
     this.dom.feedback.dataset.tone = tone;
   }
 
-  showError(message) {
+  /**
+   * @param {string} message
+   * @param {{label:string, onClick:Function}} [action] optional call-to-action
+   */
+  showError(message, action = null) {
     this.dom.errorText.textContent = message;
+    const button = this.dom.errorAction;
+    button.replaceWith(button.cloneNode(false)); // drop any previous listener
+    this.dom.errorAction = document.getElementById('error-action');
+
+    if (action) {
+      this.dom.errorAction.textContent = action.label;
+      this.dom.errorAction.hidden = false;
+      this.dom.errorAction.addEventListener('click', action.onClick);
+    } else {
+      this.dom.errorAction.hidden = true;
+    }
     this.dom.errorBanner.hidden = false;
+  }
+
+  /** Puts the banner's action button into a pending state during a long task. */
+  setErrorActionBusy(label) {
+    this.dom.errorAction.disabled = true;
+    this.dom.errorAction.textContent = label;
   }
 
   hideError() {

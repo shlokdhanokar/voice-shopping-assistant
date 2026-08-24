@@ -8,7 +8,7 @@
  */
 
 import { Store } from './store.js';
-import { VoiceEngine, isSpeechSupported } from './speech.js';
+import { VoiceEngine, isSpeechSupported, supportsOnDevice } from './speech.js';
 import { parse } from './nlp.js';
 import { UI, formatQuantity } from './ui.js';
 import { buildSuggestions, substitutesFor } from './suggestions.js';
@@ -77,6 +77,9 @@ class App {
       );
     } else {
       this.ui.setMicState('idle');
+      // If the on-device model is already downloaded, use it: no speech server
+      // round-trip, works offline, and audio never leaves the machine.
+      this.voice.useOnDeviceIfReady().catch(() => {});
     }
 
     // Seeding gives the suggestion engine a plausible history on first run.
@@ -103,8 +106,46 @@ class App {
     this.ui.setMicState('idle');
     if (code === 'no-speech') {
       this.ui.setFeedback(message, 'warn');
-    } else {
-      this.ui.showError(message);
+      return;
+    }
+
+    // A `network` error means the browser's own speech service is unreachable
+    // — a firewall, VPN or restrictive ISP, not the user's Wi-Fi. If this
+    // browser can recognise speech locally, offer that as the way out.
+    if (code === 'network' && supportsOnDevice() && !this.voice.localMode) {
+      this.ui.showError(message, {
+        label: 'Enable offline voice',
+        onClick: () => this.enableOfflineVoice()
+      });
+      return;
+    }
+
+    this.ui.showError(message);
+  }
+
+  /**
+   * Downloads the on-device speech model and switches to it. Invoked from the
+   * banner button so the browser sees a user gesture, which the download
+   * requires. The model is a one-time download of a fair size, so the UI stays
+   * explicit about what is happening.
+   */
+  async enableOfflineVoice() {
+    this.ui.setErrorActionBusy('Downloading…');
+    this.ui.setFeedback('Downloading the offline voice model (one time)…', 'warn');
+    try {
+      const ok = await this.voice.enableOnDevice();
+      if (ok) {
+        this.ui.hideError();
+        this.ui.setFeedback('Offline voice ready — tap the mic and speak.', 'ok');
+        this.say('Offline voice is ready.');
+      } else {
+        this.ui.showError(
+          'Offline voice could not be installed for this language. You can still type commands below.'
+        );
+      }
+    } catch (err) {
+      console.error('Offline voice setup failed', err);
+      this.ui.showError('Offline voice setup failed. You can still type commands below.');
     }
   }
 
@@ -118,7 +159,9 @@ class App {
     this.store.setLanguage(langKey);
     this.ui.setLanguage(langKey);
     const config = LANGUAGES.find((l) => l.key === langKey) || LANGUAGES[0];
-    this.voice.setLanguage(config.code);
+    // Re-checks on-device availability for the new language; failures are
+    // non-fatal because cloud recognition remains as the fallback.
+    Promise.resolve(this.voice.setLanguage(config.code)).catch(() => {});
     if (!silent) this.ui.setFeedback(`Language set to ${config.label}`, 'ok');
   }
 
