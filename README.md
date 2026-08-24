@@ -4,7 +4,8 @@ A voice-controlled shopping list with natural-language understanding, smart
 suggestions and voice-activated search. **Zero dependencies, zero build step,
 zero API keys** — it is plain ES modules, served as static files.
 
-> **Live demo:** <https://shlokdhanokar.github.io/voice-shopping-assistant/>
+> **Live demo:** <https://voice-shopping-assistant-vc.netlify.app>
+> **Mirror:** <https://shlokdhanokar.github.io/voice-shopping-assistant/> (GitHub Pages)
 > **Repository:** <https://github.com/shlokdhanokar/voice-shopping-assistant>
 
 ---
